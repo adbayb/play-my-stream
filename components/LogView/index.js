@@ -10,6 +10,7 @@ class LogView extends Component {
 
   render() {
     const { data } = this.props;
+    console.log(data);
 
     if (!data) {
       return null;
@@ -24,7 +25,7 @@ class LogView extends Component {
               {data[context].map(({ date, message }, index) => (
                 <p key={index} className={styles.item}>
                   {date}:
-                  <span className={styles.message}>{message.stack}</span>
+                  <span className={styles.message}>{message}</span>
                 </p>
               ))}
             </Fragment>

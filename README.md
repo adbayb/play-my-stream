@@ -1,2 +1,3 @@
 # PlayMyStream
-A radio progressive web app
+
+A progressive radio web app

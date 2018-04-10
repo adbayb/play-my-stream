@@ -11,7 +11,8 @@ class AudioPlayer extends Component {
   };
   static defaultProps = {
     autoplay: true,
-    render: () => null
+    render: () => null,
+    source: null
   };
 
   state = {
@@ -19,30 +20,29 @@ class AudioPlayer extends Component {
     error: false
   };
 
-  componentDidMount() {
-    const { autoplay, url } = this.props;
-
-    this.player = new Audio();
-    this.initPlayer({ autoplay, url });
-  }
-
   componentWillReceiveProps({ autoplay, url }) {
     if (this.props.url !== url) {
       console.log("Radio change! ", this.props.url, " => ", url);
-      this.setState(
-        // @todo: handleReset
-        () => ({
-          isPlaying: false,
-          error: false
-        }),
-        () => {
-          this.initPlayer({ autoplay, url });
-        }
-      );
+      this.handleSource({ url });
     }
   }
 
-  initPlayer = async ({ autoplay, url }) => {
+  playerDidMount = ref => {
+    console.warn("PLAYER IS MOUNT");
+    const { url } = this.props;
+
+    this.player = ref;
+    this.handleSource({ url });
+
+    this.player.addEventListener("ended", data => {
+      console.log("player->ended");
+    });
+    this.player.addEventListener("waiting", data => {
+      console.log("player->waiting");
+    });
+  };
+
+  handleSource = async ({ url }) => {
     if (!url) {
       return;
     }
@@ -51,115 +51,93 @@ class AudioPlayer extends Component {
       const source = new AudioReadableStream(url);
       await source.pipeTo(
         new AudioWritableStream(async source => {
-          this.player.src = URL.createObjectURL(source);
+          console.error("SOURCE CHANGED");
+          this.setState(() => ({
+            source: URL.createObjectURL(source)
+          }));
           // this.player.muted = true;
-          autoplay && (await this.handlePlay());
         })
       );
     } catch (error) {
-      LogStream.write("AudioPlayer->initPlayer", error);
+      LogStream.write("AudioPlayer->handleSource", error.toString());
+      console.error("AudioPlayer->handleSource", error);
     }
   };
 
-  handlePlay = async () => {
-    try {
-      const { isPlaying } = this.state;
-
+  handlePlayEvent = () => {
+    this.setState(({ isPlaying }) => {
       if (isPlaying) {
-        return;
+        return null;
       }
 
-      // @note: to avoid error like "Uncaught (in promise) DOMException: The play() request was interrupted by a new load request."
-      // Or "Uncaught (in promise) DOMException: The play() request was interrupted by a call to pause()."
-      // @see: https://developers.google.com/web/updates/2017/06/play-request-was-interrupted :
-      // @scenario:
-      // 1. video.play() starts loading video content asynchronously.
-      // 2. video.pause() interrupts video loading because it is not ready yet.
-      // 3. video.play() rejects asynchronously loudly.
-      await this.player.play();
-      this.setState(() => ({
+      return {
         isPlaying: true
-      }));
-    } catch (error) {
-      LogStream.write("AudioPlayer->handlePlay", error);
-
-      this.setState(() => ({
-        error: true
-      }));
-    }
+      };
+    });
   };
 
-  handlePause = async () => {
-    this.player.pause();
-    this.setState(() => ({
-      isPlaying: false
-    }));
-
-    try {
-      const { isPlaying } = this.state;
-
+  handlePauseEvent = () => {
+    this.setState(({ isPlaying }) => {
       if (!isPlaying) {
-        return;
+        return null;
       }
 
-      await this.player.pause();
-      this.setState(() => ({
+      return {
         isPlaying: false
-      }));
-    } catch (error) {
-      LogStream.write("AudioPlayer->handlePause", error);
-
-      this.setState(() => ({
-        error: true
-      }));
-    }
+      };
+    });
   };
 
-  playerDidMount = ref => {
-    this.player = ref;
-    this.player.addEventListener("timeupdate", data => {
-      console.log("player->timeupdate: ", this.player.currentTime);
-    });
-    this.player.addEventListener("durationchange", data => {
-      console.log("player->durationchange: ", this.player.duration);
-    });
-    this.player.addEventListener("ended", data => {
-      console.log("player->ended");
-    });
-    this.player.addEventListener("waiting", data => {
-      console.log("player->waiting");
-    });
-    this.player.addEventListener("seeked", data => {
-      console.log("player->seeked");
-    });
-    this.player.addEventListener("seeking", data => {
-      console.log("player->seeking");
-    });
-    this.player.addEventListener("suspend", data => {
-      console.log("player->suspend");
-    });
-    this.player.addEventListener("playing", data => {
-      console.log("player->playing");
-    });
-    this.player.addEventListener("play", data => {
-      console.log("player->play");
-    });
-    this.player.addEventListener("pause", data => {
-      console.log("player->pause");
-    });
+  handleSuspendEvent = () => {
+    console.error("SUSPEND EVENT TRIGGER");
+  };
+
+  handleTimeUpdateEvent = () => {
+    console.log(
+      "player->handleTimeUpdateEvent: ",
+      this.player.currentTime,
+      this.player.buffered
+    );
+  };
+
+  handleEndedEvent = () => {
+    console.error("ENDED EVENT TRIGGER");
+  };
+
+  handlePlay = () => {
+    // @note: to avoid error like "Uncaught (in promise) DOMException: The play() request was interrupted by a new load request."
+    // Or "Uncaught (in promise) DOMException: The play() request was interrupted by a call to pause()."
+    // @see: https://developers.google.com/web/updates/2017/06/play-request-was-interrupted :
+    // @scenario:
+    // 1. video.play() starts loading video content asynchronously.
+    // 2. video.pause() interrupts video loading because it is not ready yet.
+    // 3. video.play() rejects asynchronously loudly.
+    this.player.play();
+  };
+
+  handlePause = () => {
+    this.player.pause();
   };
 
   render() {
-    const { render } = this.props;
-    const { isPlaying } = this.state;
+    const { autoplay, render } = this.props;
+    const { isPlaying, source } = this.state;
 
     return (
       <Fragment>
-        {/* <audio
+        <audio
           ref={this.playerDidMount}
           preload="auto"
-          src="https://medradio-maroc.ice.infomaniak.ch/medradio-maroc-64.mp3"
-        /> */}
+          src={source}
+          onPlay={this.handlePlayEvent}
+          onPause={this.handlePauseEvent}
+          onSuspend={this.handleSuspendEvent}
+          onEnded={this.handleEndedEvent}
+          onTimeUpdate={this.handleTimeUpdateEvent}
+          autoPlay={autoplay}
+        >
+          No support for HTML audio element provided by your browser
+        </audio>
         {render({
           play: this.handlePlay,
           pause: this.handlePause,

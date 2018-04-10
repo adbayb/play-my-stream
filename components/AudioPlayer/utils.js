@@ -1,93 +1,96 @@
 export class AudioWritableStream {
   constructor(onSourceReady) {
+    this.mediaSource = null;
     this.waitingQueue = [];
     this.buffer = null;
+    this.queueBuffer = new Uint8Array();
     this.onSourceReady = onSourceReady;
 
     return new WritableStream(this);
   }
 
   start(controller) {
-    const source = this.createSource();
-    this.onSourceReady(source);
+    this.mediaSource = this.createSource();
+    this.onSourceReady(this.mediaSource);
+
+    // this.handleQuotaExceeded(controller);
   }
+
+  handleQuotaExceeded = async controller => {
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    // URL.createObjectURL(new Blob([], { type: "audio/mpeg" }))
+
+    // this.activeSource.endOfStream();
+    // this.activeSource.removeSourceBuffer(this.buffer);
+    this.mediaSource.endOfStream();
+    this.mediaSource.removeSourceBuffer(this.buffer);
+    // this.buffer = null;
+
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    this.mediaSource = this.createSource();
+    this.onSourceReady(this.mediaSource);
+    // this.attachBuffer(this.mediaSource);
+  };
 
   createSource() {
     const source = new MediaSource();
-
-    source.addEventListener("sourceopen", () => {
-      // @note: addSourceBuffer needs to be called when source is open to avoid
-      // InvalidStateError (@see: https://developer.mozilla.org/en-US/docs/Web/API/MediaSource/addSourceBuffer#Errors)
-      // or Failed to execute 'addSourceBuffer' on 'MediaSource': The MediaSource's readyState is not 'open'
-      this.buffer = source.addSourceBuffer("audio/mpeg");
-      this.buffer.addEventListener("updateend", () => {
-        if (this.waitingQueue.length > 0) {
-          this.buffer.appendBuffer(this.waitingQueue.shift());
-        }
-      });
-    });
+    source.addEventListener("sourceopen", () => this.attachBuffer(source));
 
     return source;
   }
 
+  attachBuffer(source) {
+    // @todo: transform this.buffer to function local variable:
+
+    // @note: addSourceBuffer needs to be called when source is open to avoid
+    // InvalidStateError (@see: https://developer.mozilla.org/en-US/docs/Web/API/MediaSource/addSourceBuffer#Errors)
+    // or Failed to execute 'addSourceBuffer' on 'MediaSource': The MediaSource's readyState is not 'open'
+    this.buffer = source.addSourceBuffer("audio/mpeg");
+    this.buffer.addEventListener("updateend", () => {
+      this.buffer.appendBuffer(this.queueBuffer);
+      // @note: flush the queue:
+      this.queueBuffer = new Uint8Array();
+    });
+    this.buffer.appendBuffer(this.queueBuffer);
+
+    this.buffer.addEventListener("error", error => {
+      console.error("SourceBuffer error", error);
+    });
+    this.buffer.addEventListener("abort", error => {
+      console.error("SourceBuffer abort", error);
+    });
+  }
+
   write(chunk, controller) {
-    try {
-      this.push(chunk);
+    this.queueBuffer = new Uint8Array([...this.queueBuffer, ...chunk]);
+    // console.log(this.queueBuffer, this.buffer.updating, chunk);
+    // try {
+    //   this.push(chunk);
+    // } catch (error) {
+    //   // LogStream.write("AudioWritableStream->write", error.toString());
+    //   console.error(error);
 
-      // new Promise(resolve => setTimeout(resolve, 1000))
-      //   .then(() => {
-      //     throw new class extends Error {
-      //       constructor(...args) {
-      //         super(...args);
-      //         this.name = "QuotaExceededError";
-      //         this.message = "aie";
-      //       }
-      //     }();
-      //   })
-      //   .catch(error => {
-      //     console.error("====> QUOTA ERROR", error);
-      //     // this.source.endOfStream();
-      //     // @todo: queue source stream
-      //     controller.error(error);
-      //   });
-    } catch (error) {
-      LogStream.write("AudioWritableStream->write", error);
-
-      if (error.name !== "QuotaExceededError") {
-        // @note: Writable error stream occurs (for example source buffer error...)
-        // It will call the ReadableStream.cancel() hook:
-        controller.error(error);
-      } else {
-        // @todo: queue source stream
-      }
-    }
+    //   if (error.name !== "QuotaExceededError") {
+    //     // @note: Writable error stream occurs (for example source buffer error...)
+    //     // It will call the ReadableStream.cancel() hook:
+    //     // controller.error(error);
+    //   } else {
+    //     // @todo: queue source stream
+    //   }
+    // }
   }
 
   close(controller) {
-    LogStream.write("AudioWritableStream->close", "walou");
+    LogStream.write("AudioWritableStream->close");
     controller.close();
 
     console.error("AudioWritableStream->close", controller);
   }
 
   abort(reason) {
-    LogStream.write("AudioWritableStream->abort", "walou");
+    LogStream.write("AudioWritableStream->abort");
 
     console.error("AudioWritableStream->abort", reason);
-  }
-
-  // @note: utility function:
-  push(chunk) {
-    // @note: we use appendBuffer to append a chunk if and only if the buffer is not currently updating its state (to avoid InvalidStateError)
-    // and the queue of missed chunks is totally flushed (to garantee continuous chunks reading):
-    if (this.buffer.updating || this.waitingQueue.length > 0) {
-      // @note: fallback to avoid concurrent appendBuffer (SourceBuffer is not available while it's working (e.g. here appending the previous chunk for example))
-      this.waitingQueue.push(chunk);
-
-      return;
-    }
-
-    this.buffer.appendBuffer(chunk);
   }
 }
 
