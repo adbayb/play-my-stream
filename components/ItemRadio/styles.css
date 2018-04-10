@@ -1,0 +1,23 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+
+.container:not(:first-child) {
+  margin-left: 2rem;
+}
+
+.logo {
+  border-radius: 50%;
+  height: 6rem;
+  width: 6rem;
+  border: 5px solid rgba(0, 0, 0, 0.5);
+}
+
+.name {
+  font-weight: bold;
+  margin: 10px 0;
+  align-self: center;
+  text-align: center;
+}

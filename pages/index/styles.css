@@ -1,0 +1,26 @@
+.container {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  background-color: #ffd180;
+  padding: 1.5rem 1rem;
+}
+
+.mainContainer {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.playerContainer {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.audioIcon {
+  margin: auto;
+  max-width: 10rem;
+  height: 10rem;
+}

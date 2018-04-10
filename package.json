@@ -1,0 +1,23 @@
+{
+  "name": "radio-stream",
+  "version": "0.1.0",
+  "description": "A radio stream application ",
+  "main": "src/index.html",
+  "scripts": {
+    "dev": "next",
+    "build": "next build",
+    "start": "next start"
+  },
+  "author": "Ayoub Adib <adbayb@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@zeit/next-css": "^0.1.5",
+    "classnames": "^2.2.5",
+    "next": "^5.1.0",
+    "react": "^16.3.1",
+    "react-dom": "^16.3.1"
+  },
+  "devDependencies": {
+    "prop-types": "^15.6.1"
+  }
+}

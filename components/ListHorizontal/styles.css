@@ -1,0 +1,8 @@
+.container {
+  display: inline-flex;
+  flex: none;
+  flex-wrap: nowrap;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+}

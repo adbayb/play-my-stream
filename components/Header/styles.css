@@ -1,0 +1,20 @@
+.container {
+  display: grid;
+  /* @note: grid: grid-template-rows / grid-template-columns */
+  /* @note: fr = unité (facteur de flexibilité <=> ratio par rapport aux autres grid items) */
+  grid: 1fr / 1fr 5fr 1fr;
+  justify-items: center;
+  min-height: 2.2rem;
+}
+
+.sideContainer {
+  display: flex;
+  justify-content: center;
+  justify-self: stretch;
+}
+
+.label {
+  font-size: 1.4rem;
+  align-self: center;
+  margin: 0;
+}
