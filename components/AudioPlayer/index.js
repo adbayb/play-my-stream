@@ -11,13 +11,13 @@ class AudioPlayer extends Component {
   };
   static defaultProps = {
     autoplay: true,
-    render: () => null,
-    source: null
+    render: () => null
   };
 
   state = {
     isPlaying: false,
-    error: false
+    error: false,
+    source: null
   };
 
   componentWillReceiveProps({ autoplay, url }) {
@@ -40,6 +40,10 @@ class AudioPlayer extends Component {
     this.player.addEventListener("waiting", data => {
       console.log("player->waiting");
     });
+
+    this.player.addEventListener("error", data => {
+      console.log("player->error", data);
+    });
   };
 
   handleSource = async ({ url }) => {
@@ -49,15 +53,14 @@ class AudioPlayer extends Component {
 
     try {
       const source = new AudioReadableStream(url);
-      await source.pipeTo(
-        new AudioWritableStream(async source => {
-          console.error("SOURCE CHANGED");
-          this.setState(() => ({
-            source: URL.createObjectURL(source)
-          }));
-          // this.player.muted = true;
-        })
-      );
+      const writableStream = new AudioWritableStream(async source => {
+        console.error("SOURCE CHANGED");
+        this.setState(() => ({
+          source: URL.createObjectURL(source)
+        }));
+      });
+
+      await source.pipeTo(writableStream);
     } catch (error) {
       LogStream.write("AudioPlayer->handleSource", error.toString());
       console.error("AudioPlayer->handleSource", error);
@@ -89,19 +92,19 @@ class AudioPlayer extends Component {
   };
 
   handleSuspendEvent = () => {
-    console.error("SUSPEND EVENT TRIGGER");
+    // console.error("SUSPEND EVENT TRIGGER");
   };
 
   handleTimeUpdateEvent = () => {
-    console.log(
-      "player->handleTimeUpdateEvent: ",
-      this.player.currentTime,
-      this.player.buffered
-    );
+    // console.log(
+    //   "player->handleTimeUpdateEvent: ",
+    //   this.player.currentTime,
+    //   this.player.buffered
+    // );
   };
 
   handleEndedEvent = () => {
-    console.error("ENDED EVENT TRIGGER");
+    // console.error("ENDED EVENT TRIGGER");
   };
 
   handlePlay = () => {
