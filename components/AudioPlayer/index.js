@@ -19,31 +19,26 @@ class AudioPlayer extends Component {
     error: false,
     source: null
   };
+  currentStream = null;
 
   componentWillReceiveProps({ autoplay, url }) {
     if (this.props.url !== url) {
-      console.log("Radio change! ", this.props.url, " => ", url);
-      this.handleSource({ url });
+      console.warn(`Radio changed: ${this.props.url} => ${url}`);
+      this.currentStream
+        .abort()
+        .then(() => {
+          this.handleSource({ url });
+        })
+        .catch(err => console.error(err));
     }
   }
 
   playerDidMount = ref => {
-    console.warn("PLAYER IS MOUNT");
+    console.warn("Player is mount (dom ready)");
     const { url } = this.props;
 
     this.player = ref;
     this.handleSource({ url });
-
-    this.player.addEventListener("ended", data => {
-      console.log("player->ended");
-    });
-    this.player.addEventListener("waiting", data => {
-      console.log("player->waiting");
-    });
-
-    this.player.addEventListener("error", data => {
-      console.log("player->error", data);
-    });
   };
 
   handleSource = async ({ url }) => {
@@ -52,18 +47,21 @@ class AudioPlayer extends Component {
     }
 
     try {
-      const source = new AudioReadableStream(url);
-      const writableStream = new AudioWritableStream(async source => {
-        console.error("SOURCE CHANGED");
+      const readableStream = new AudioReadableStream(url);
+      const writableStream = new AudioWritableStream(source => {
+        console.warn("Audio stream source is ready");
         this.setState(() => ({
           source: URL.createObjectURL(source)
         }));
       });
 
-      await source.pipeTo(writableStream);
+      // @todo: better way without instance variable ?
+      this.writableStream = writableStream;
+      this.currentStream = readableStream;
+
+      await readableStream.getStream().pipeTo(writableStream.getStream());
     } catch (error) {
       LogStream.write("AudioPlayer->handleSource", error.toString());
-      console.error("AudioPlayer->handleSource", error);
     }
   };
 
@@ -91,23 +89,12 @@ class AudioPlayer extends Component {
     });
   };
 
-  handleSuspendEvent = () => {
-    // console.error("SUSPEND EVENT TRIGGER");
-  };
-
-  handleTimeUpdateEvent = () => {
-    // console.log(
-    //   "player->handleTimeUpdateEvent: ",
-    //   this.player.currentTime,
-    //   this.player.buffered
-    // );
-  };
-
   handleEndedEvent = () => {
-    // console.error("ENDED EVENT TRIGGER");
+    console.warn("Player->end: setting next source...");
+    this.writableStream.handleNextSource();
   };
 
-  handlePlay = () => {
+  handlePlay = async () => {
     // @note: to avoid error like "Uncaught (in promise) DOMException: The play() request was interrupted by a new load request."
     // Or "Uncaught (in promise) DOMException: The play() request was interrupted by a call to pause()."
     // @see: https://developers.google.com/web/updates/2017/06/play-request-was-interrupted :
@@ -115,11 +102,11 @@ class AudioPlayer extends Component {
     // 1. video.play() starts loading video content asynchronously.
     // 2. video.pause() interrupts video loading because it is not ready yet.
     // 3. video.play() rejects asynchronously loudly.
-    this.player.play();
+    await this.player.play();
   };
 
-  handlePause = () => {
-    this.player.pause();
+  handlePause = async () => {
+    await this.player.pause();
   };
 
   render() {
@@ -134,9 +121,7 @@ class AudioPlayer extends Component {
           src={source}
           onPlay={this.handlePlayEvent}
           onPause={this.handlePauseEvent}
-          onSuspend={this.handleSuspendEvent}
           onEnded={this.handleEndedEvent}
-          onTimeUpdate={this.handleTimeUpdateEvent}
           autoPlay={autoplay}
         >
           No support for HTML audio element provided by your browser

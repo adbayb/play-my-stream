@@ -5,7 +5,7 @@ export default class MyDocument extends Document {
     return (
       <html>
         <Head>
-          <title>Radio Stream</title>
+          <title>PlayMyStream</title>
           <meta charset="utf-8" />
           <meta
             name="viewport"

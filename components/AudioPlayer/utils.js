@@ -1,69 +1,63 @@
 export class AudioWritableStream {
   constructor(onSourceReady) {
-    this.mediaSource = null;
-    this.waitingQueue = [];
-    this.buffer = null;
     this.queueBuffer = [];
+    this.queueSource = [];
+    this.activeSource = null;
+    this.activeBuffer = null;
     this.onSourceReady = onSourceReady;
+    this.stream = new WritableStream(this);
+  }
 
-    return new WritableStream(this);
+  getStream() {
+    return this.stream;
   }
 
   start(controller) {
-    this.mediaSource = this.createSource(controller);
-    this.onSourceReady(this.mediaSource);
-
-    // this.handleQuotaExceeded(controller);
+    this.activeSource = this.createSource(controller);
+    this.onSourceReady(this.activeSource);
   }
 
-  handleQuotaExceeded = async controller => {
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    // URL.createObjectURL(new Blob([], { type: "audio/mpeg" }))
-    // this.mediaSource.endOfStream();
-    // this.mediaSource.removeSourceBuffer(this.buffer);
+  handleNextSource = controller => {
+    const nextSource = this.queueSource.shift();
+    console.log("handleNextSource", nextSource);
 
-    console.log("handleQuotaExceeded");
+    if (!nextSource) {
+      return;
+    }
 
-    // Attempt
-    this.buffer.abort();
-    this.mediaSource.removeSourceBuffer(this.buffer);
+    this.onSourceReady(nextSource);
+  };
 
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    // this.mediaSource = this.createSource(controller);
-    // this.onSourceReady(this.mediaSource);
-    this.attachBuffer(this.mediaSource, controller);
-    // this.mediaSource = this.createSource();
-    // this.onSourceReady(this.mediaSource);
+  enqueueSource = () => {
+    this.activeSource = this.createSource();
+    this.queueSource.push(this.activeSource);
+    console.log("enqueueSource", this.queueSource);
   };
 
   createSource(controller) {
     const source = new MediaSource();
-    source.addEventListener("sourceopen", () =>
-      this.attachBuffer(source, controller)
-    );
+    source.addEventListener("sourceopen", () => {
+      console.warn(
+        "MediaSource is open (e.g. currently playing by an HTMLAudioElement)"
+      );
+      this.activeBuffer = this.createBuffer(source, controller);
+    });
 
     return source;
   }
 
-  attachBuffer(source, controller) {
-    // @todo: transform this.buffer to function local variable:
-
+  createBuffer(source, controller) {
     // @note: addSourceBuffer needs to be called when source is open to avoid
     // InvalidStateError (@see: https://developer.mozilla.org/en-US/docs/Web/API/MediaSource/addSourceBuffer#Errors)
     // or Failed to execute 'addSourceBuffer' on 'MediaSource': The MediaSource's readyState is not 'open'
-    this.buffer = source.addSourceBuffer("audio/mpeg");
-    this.buffer.addEventListener("updateend", () => {
+    const buffer = source.addSourceBuffer("audio/mpeg");
+    buffer.addEventListener("updateend", () => {
       // @note: flush the queue:
       this.push(this.queueBuffer.shift(), controller);
+      // console.log("flushing...", this.queueBuffer.length);
     });
 
-    // this.buffer.addEventListener("error", error => {
-    //   console.error("SourceBuffer error", error);
-    // });
-    // this.buffer.addEventListener("abort", error => {
-    //   console.error("SourceBuffer abort", error);
-    // });
+    return buffer;
   }
 
   write(chunk, controller) {
@@ -76,38 +70,38 @@ export class AudioWritableStream {
     }
 
     try {
-      if (!this.buffer.updating) {
-        this.buffer.appendBuffer(chunk);
+      if (
+        !this.activeBuffer.updating &&
+        this.activeSource.readyState === "open"
+      ) {
+        this.activeBuffer.appendBuffer(chunk);
       } else {
         this.queueBuffer.push(chunk);
+        // console.log("buffering...", this.queueBuffer.length);
       }
     } catch (error) {
-      if (error.name !== "QuotaExceededError") {
-        // @todo: create new source
-        // or try removeBuffer => source.appendBuffer
+      if (error.name === "QuotaExceededError") {
+        console.error("QuotaExceededError");
+        this.activeSource.endOfStream();
+        this.enqueueSource();
 
         return;
       }
-
       // @todo clean listeners here (graceful shutdown of the stream):
-
+      // URL.revokeObjectURL(audio.src);
       // @note: Writable error stream occurs (for example source buffer error...)
       // It will call the ReadableStream.cancel() hook:
+      console.error(error);
       controller.error(error);
     }
   };
 
-  close(controller) {
+  close() {
     LogStream.write("AudioWritableStream->close");
-    console.error("AudioWritableStream->close", controller);
-
-    controller.close();
   }
 
   abort(reason) {
     LogStream.write("AudioWritableStream->abort");
-
-    console.error("AudioWritableStream->abort", reason);
   }
 }
 
@@ -115,8 +109,13 @@ export class AudioReadableStream {
   constructor(url) {
     this.reader = null;
     this.url = url;
+    this.stream = new ReadableStream(this);
 
-    return new ReadableStream(this);
+    // return new ReadableStream(this)
+  }
+
+  getStream() {
+    return this.stream;
   }
 
   async start(controller) {
@@ -138,11 +137,19 @@ export class AudioReadableStream {
 
   cancel(reason) {
     console.error("AudioReadableStream->cancel", reason);
-    console.log(this.reader);
-
     // @note: graceful shutdown of the readable stream here
     // @note: we cancel chunk reading process: fetch will consecuently abort:
     this.reader.cancel();
+  }
+
+  abort() {
+    if (!this.reader) {
+      return Promise.resolve();
+    }
+    // @note: we can't use built-in ReadableStream cancel() function to abort stream
+    // since we're going to have this error: Cannot cancel a readable stream that is locked to a reader
+    // We need to create our own function to cancel reader which results on calling close() builtin WritableStream hook
+    return this.reader.cancel();
   }
 }
 
